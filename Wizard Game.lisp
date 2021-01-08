@@ -2,7 +2,8 @@
 ;;;; I made this project to learn lisp.
 ;;;; Project taken from the book "The land of lisp" by Conrad Barski.
 
-(in-package #:Wizard Game)
+;; (in-package #:WizardGame)
+;; I'll not be using ASDF for this project. 
 
 ;;; This is all the nodes where the character can move around in the game.
 (defparameter *nodes*
@@ -27,7 +28,10 @@
 				   (bucket  living-room)
 				   (chain   garden)
 				   (frog    garden)))
-				 
+
+;;; Defines which commands are allowed in the game. To be used together with function
+;;; game-eval.
+(defparameter *allowed-commands* '(look walk pickup inventory))
 
 ;;; This function gives a description of any passed node.
 ;; This is an exercise in how the assoc function can be used.
@@ -115,3 +119,50 @@
 ;;; Function to print out what we have picked up.
 (defun inventory()
   (cons 'items-  (objects-at 'body *objects* *object-locations*)))
+
+;;; We don't want the player to insert brackets, quote marks etc,
+;;; so we need to make a custom REPL
+(defun game-repl()
+  (let ((command (game-read)))
+    (unless (eq (car command) 'quit) ;if not quit is typed, continue.
+      (game-print (game-eval command))
+      (game-repl)))) ; loop by recursion
+
+;;; Defining function game-read, game-eval and game-print.
+;;  Concatinate has return-type as first argument, then all the strings.
+;;  Read-from-string takes a string and makes it into a lisp object.
+;;  The list function with parameter 'quote take any symbol and puts a quote in front of it.
+;;  E.g. (list 'quote 'hello) becomes 'HELLO
+(defun game-read ()
+  (let ((command (read-from-string (concatenate 'string "(" (read-line) ")"))))
+    (flet ((quote-it (x)
+	     (list 'quote x)))
+      (cons (car command) (mapcar #'quote-it (cdr command))))))
+
+(defun game-eval (command)
+  (if (member (car command) *allowed-commands*) ;if the first symbol in the command is allwed
+      (eval command) ; if true
+      '(Allowed commands are look walk pickup and inventory. Type quit to quit.))) ; if false
+
+(defun game-print (outstring)
+  (princ (coerce (tweak-text (coerce (string-trim "()" ;removes brackets from second argument
+						  (prin1-to-string outstring)) ;symbol list to string
+				     'list) ;coerce convert string to list of characters
+			     t ; 2nd argument to tweak-text, caps=true
+			     nil) ;3rd argument to tweak-text, lit=false
+		 'string)) ; coerce make list back to string again, and pass to princ
+  (fresh-line)) ; prints a new line.
+
+;;; Helper function for game-print
+(defun tweak-text (outstring caps lit)
+  (when outstring
+    (let ((item (car outstring)) ; First word in the string
+	  (rest (cdr outstring))) ; The rest of the string
+      (cond ((eql item #\space) (cons item (tweak-text rest caps lit))) ; if item is space
+	    ((member item '(#\! #\? #\.)) (cons item (tweak-text rest t lit))) ; if item is ? ! or . then process rest with caps = true.
+	    ((eql item #\") (tweak-text rest caps (not lit))) ; if item is ", then process rest with caps = true and lit = not lit.
+	    (lit (cons item (tweak-text rest nil lit))) ; if lit = true, process rest with lowercase
+	    (caps (cons (char-upcase item) (tweak-text rest nil lit))) ; if caps = true, make item uppercase and process rest with lowercase
+	    (t (cons (char-downcase item) (tweak-text rest nil nil))))))) ; else-clause
+
+(game-repl)
